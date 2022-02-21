@@ -72,14 +72,14 @@ char *break_pass(unsigned char *md5, long* count) {
 }
 
 void *progress_bar(void *ptr){
-    long bound = ipow(26, PASS_LEN);
+    double bound = ipow(26, PASS_LEN);
     long *count = ptr;
 
     while(1){
-        printf("\r%ld", *count);
+        printf("\r%4.2f%%", (*count/ bound)*100);
         fflush(stdout);
     }
-    
+
     return NULL;
 }
 
