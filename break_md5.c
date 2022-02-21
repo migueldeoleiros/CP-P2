@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #define PASS_LEN 6
 
@@ -13,10 +14,7 @@ long ipow(long base, int exp)
     {
         if (exp & 1)
             res *= base;
-        exp >>= 1;
-        if (!exp)
-            break;
-        base *= base;
+        exp >>= 1; if (!exp) break; base *= base;
     }
 
     return res;
@@ -51,10 +49,10 @@ int hex_value(char c) {
 
 void hex_to_num(char *str, unsigned char *hex) {
     for(int i=0; i < MD5_DIGEST_LENGTH; i++)
-        hex[i] = hex_value(str[i*2]) << 4 + hex_value(str[i*2 + 1]);
+        hex[i] = (hex_value(str[i*2]) << 4) + hex_value(str[i*2 + 1]);
 }
 
-char *break_pass(unsigned char *md5) {
+char *break_pass(unsigned char *md5, long* count) {
     unsigned char res[MD5_DIGEST_LENGTH];
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     long bound = ipow(26, PASS_LEN); // we have passwords of PASS_LEN
@@ -67,12 +65,37 @@ char *break_pass(unsigned char *md5) {
         MD5(pass, PASS_LEN, res);
 
         if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)) break; // Found it!
+        *count = i;
     }
 
     return (char *) pass;
 }
 
+void *progress_bar(void *ptr){
+    long bound = ipow(26, PASS_LEN);
+    long *count = ptr;
+
+    while(1){
+        printf("\r%ld", *count);
+        fflush(stdout);
+    }
+    
+    return NULL;
+}
+
+pthread_t start_progress(long *count){
+    pthread_t thread;
+    if (0 != pthread_create(&thread, NULL, progress_bar, count)) {
+        printf("Could not create thread");
+        exit(1);
+    }
+
+    return thread;
+}
+
 int main(int argc, char *argv[]) {
+    long i = 0;
+    long *count = &i;
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
         exit(0);
@@ -81,7 +104,8 @@ int main(int argc, char *argv[]) {
     unsigned char md5_num[MD5_DIGEST_LENGTH];
     hex_to_num(argv[1], md5_num);
 
-    char *pass = break_pass(md5_num);
+    pthread_t thr = start_progress(count);
+    char *pass = break_pass(md5_num, count);
 
     printf("%s: %s\n", argv[1], pass);
     free(pass);
