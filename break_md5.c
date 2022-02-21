@@ -64,7 +64,10 @@ char *break_pass(unsigned char *md5, long* count) {
 
         MD5(pass, PASS_LEN, res);
 
-        if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)) break; // Found it!
+        if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)){
+            *count = -1;
+            break; // Found it!   
+        }
         *count = i;
     }
 
@@ -75,7 +78,7 @@ void *progress_bar(void *ptr){
     double bound = ipow(26, PASS_LEN);
     long *count = ptr;
 
-    while(1){
+    while(*count != -1){
         printf("\r%4.2f%%", (*count/ bound)*100);
         fflush(stdout);
     }
@@ -107,6 +110,7 @@ int main(int argc, char *argv[]) {
     pthread_t thr = start_progress(count);
     char *pass = break_pass(md5_num, count);
 
+    printf("\n--------------------------------\n");
     printf("%s: %s\n", argv[1], pass);
     free(pass);
     return 0;
