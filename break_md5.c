@@ -2,6 +2,7 @@
 #include <openssl/md5.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <pthread.h>
 #include <math.h>
@@ -75,6 +76,13 @@ char *break_pass(unsigned char *md5, long* count) {
     return (char *) pass;
 }
 
+void op_speed(long *count){
+    int j;
+    j = *count;
+    usleep(1000000);
+    printf("\r\033[60C  %ld op/seg",*count-j);
+}
+
 void *progress_bar(void *ptr){
     double bound = ipow(26, PASS_LEN);
     long *count = ptr;
@@ -96,6 +104,9 @@ void *progress_bar(void *ptr){
         for(i=2;i<=percent;i+=2)
             printf("\x1b[32m#\x1b[0m");
         printf("\r");
+
+        op_speed(count); //operations per second
+
         fflush(stdout);
     }
     return NULL;
