@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <math.h>
 
 #define PASS_LEN 6
 
@@ -66,7 +67,7 @@ char *break_pass(unsigned char *md5, long* count) {
 
         if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)){
             *count = -1;
-            break; // Found it!   
+            break; // Found it!
         }
         *count = i;
     }
@@ -77,12 +78,17 @@ char *break_pass(unsigned char *md5, long* count) {
 void *progress_bar(void *ptr){
     double bound = ipow(26, PASS_LEN);
     long *count = ptr;
+    double percent = 0;
 
-    while(*count != -1){
-        printf("\r%4.2f%%", (*count/ bound)*100);
+    while(*count!=-1){
+        percent = (*count/ bound)*100;
+        printf("\r%4.2f%%",percent);
+        printf("\t");
+        for(int i=2;i<percent;i+=2)
+            printf("x");
+        printf("\r");
         fflush(stdout);
     }
-
     return NULL;
 }
 
