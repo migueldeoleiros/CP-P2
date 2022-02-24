@@ -79,13 +79,22 @@ void *progress_bar(void *ptr){
     double bound = ipow(26, PASS_LEN);
     long *count = ptr;
     double percent = 0;
+    int i;
 
+    //print empty bar
+    printf("\r%4.2f%%",percent);
+    printf("\t [");
+    for(i=0;i<98;i+=2)
+        printf(".");
+    printf("]");
+
+    //fill bar
     while(*count!=-1){
         percent = (*count/ bound)*100;
         printf("\r%4.2f%%",percent);
-        printf("\t");
-        for(int i=2;i<percent;i+=2)
-            printf("x");
+        printf("\r\033[10C");
+        for(i=2;i<=percent;i+=2)
+            printf("\x1b[32m#\x1b[0m");
         printf("\r");
         fflush(stdout);
     }
@@ -113,10 +122,11 @@ int main(int argc, char *argv[]) {
     unsigned char md5_num[MD5_DIGEST_LENGTH];
     hex_to_num(argv[1], md5_num);
 
-    pthread_t thr = start_progress(count);
+    //start progress bar
+    start_progress(count);
     char *pass = break_pass(md5_num, count);
 
-    printf("\n--------------------------------\n");
+    printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], pass);
     free(pass);
     return 0;
