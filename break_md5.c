@@ -79,8 +79,8 @@ char *break_pass(unsigned char *md5, long* count) {
 void op_speed(long *count){
     int j;
     j = *count;
-    usleep(1000000);
-    printf("\r\033[60C  %ld op/seg",*count-j);
+    usleep(250000); //wait a quarter of a second
+    printf("\r\033[60C  %ld op/seg",(*count-j)*4);
 }
 
 void *progress_bar(void *ptr){
