@@ -92,7 +92,8 @@ void op_speed(struct count *count) {
     int j;
     j = count->count;
     usleep(250000); //wait a quarter of a second
-    printf("\r\033[60C  %ld op/seg",(count->count-j)*4);
+    if(j<count->count)
+        printf("\r\033[60C  %ld op/seg",(count->count-j)*4);
 }
 
 void *progress_bar(void *ptr) {
@@ -151,8 +152,10 @@ int main(int argc, char *argv[]) {
     args->md5 = md5_num;
 
     //start progress bar
-    start_progress(args->count);
+    pthread_t thr = start_progress(args->count);
     break_pass(args);
+
+    pthread_join(thr, NULL);
 
     printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], args->pass);
