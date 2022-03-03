@@ -9,8 +9,12 @@
 
 #define PASS_LEN 6
 
-long ipow(long base, int exp)
-{
+struct count {
+    long count; // total iterations at the moment
+    pthread_mutex_t mutex;
+};
+
+long ipow(long base, int exp) {
     long res = 1;
     for (;;)
     {
@@ -54,7 +58,7 @@ void hex_to_num(char *str, unsigned char *hex) {
         hex[i] = (hex_value(str[i*2]) << 4) + hex_value(str[i*2 + 1]);
 }
 
-char *break_pass(unsigned char *md5, long* count) {
+char *break_pass(unsigned char *md5, struct count *count) {
     unsigned char res[MD5_DIGEST_LENGTH];
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     long bound = ipow(26, PASS_LEN); // we have passwords of PASS_LEN
@@ -67,25 +71,25 @@ char *break_pass(unsigned char *md5, long* count) {
         MD5(pass, PASS_LEN, res);
 
         if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)){
-            *count = -1;
+            count->count = -1;
             break; // Found it!
         }
-        *count = i;
+        count->count = i;
     }
 
     return (char *) pass;
 }
 
-void op_speed(long *count){
+void op_speed(struct count *count) {
     int j;
-    j = *count;
+    j = count->count;
     usleep(250000); //wait a quarter of a second
-    printf("\r\033[60C  %ld op/seg",(*count-j)*4);
+    printf("\r\033[60C  %ld op/seg",(count->count-j)*4);
 }
 
-void *progress_bar(void *ptr){
+void *progress_bar(void *ptr) {
     double bound = ipow(26, PASS_LEN);
-    long *count = ptr;
+    struct count *count = ptr;
     double percent = 0;
     int i;
 
@@ -97,8 +101,8 @@ void *progress_bar(void *ptr){
     printf("]");
 
     //fill bar
-    while(*count!=-1){
-        percent = (*count/ bound)*100;
+    while(count->count!=-1){
+        percent = (count->count / bound)*100;
         printf("\r%4.2f%%",percent);
         printf("\r\033[10C");
         for(i=2;i<=percent;i+=2)
@@ -112,7 +116,7 @@ void *progress_bar(void *ptr){
     return NULL;
 }
 
-pthread_t start_progress(long *count){
+pthread_t start_progress(struct count *count) {
     pthread_t thread;
     if (0 != pthread_create(&thread, NULL, progress_bar, count)) {
         printf("Could not create thread");
@@ -123,8 +127,10 @@ pthread_t start_progress(long *count){
 }
 
 int main(int argc, char *argv[]) {
-    long i = 0;
-    long *count = &i;
+    struct count count;
+    pthread_mutex_init(&count.mutex,NULL);
+    count.count = 0;
+
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
         exit(0);
@@ -134,8 +140,8 @@ int main(int argc, char *argv[]) {
     hex_to_num(argv[1], md5_num);
 
     //start progress bar
-    start_progress(count);
-    char *pass = break_pass(md5_num, count);
+    start_progress(&count);
+    char *pass = break_pass(md5_num, &count);
 
     printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], pass);
