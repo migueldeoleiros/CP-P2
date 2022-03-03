@@ -8,7 +8,7 @@
 #include <math.h>
 
 #define PASS_LEN 6
-#define NUM_THREADS 5
+#define NUM_THREADS 8
 #define NUM_ITER 5
 
 struct count {
@@ -20,6 +20,11 @@ struct args {
     char   *pass;
     unsigned char *md5;
     struct count *count;
+};
+
+struct thread_info {
+    pthread_t thread;
+    struct args *args;
 };
 
 long ipow(long base, int exp) {
@@ -74,18 +79,16 @@ void *break_pass(void *ptr) {
                                      // lowercase chars =>
                                      //     26 ^ PASS_LEN  different cases
 
-    /* for(long i = args->count->count; i < bound; i++) { */
     pthread_mutex_lock(&args->count->mutex);
     while(args->count->count < bound || args->count->count != -1){
         pthread_mutex_unlock(&args->count->mutex);
 
         pthread_mutex_lock(&args->count->mutex);
-        args->count->count += NUM_ITER;
+        args->count->count += NUM_THREADS;
         pthread_mutex_unlock(&args->count->mutex);
-        for(long i = 0; i < NUM_ITER; i++) {
 
             pthread_mutex_lock(&args->count->mutex);
-            long_to_pass(args->count->count + i, pass);
+            long_to_pass(args->count->count, pass);
             pthread_mutex_unlock(&args->count->mutex);
 
             MD5(pass, PASS_LEN, res);
@@ -96,9 +99,10 @@ void *break_pass(void *ptr) {
                 pthread_mutex_unlock(&args->count->mutex);
 
                 args->pass = (char *) pass;
+                return (char *) pass;
                 break; // Found it!
             }
-        }
+        
 
         pthread_mutex_lock(&args->count->mutex);
     }
@@ -154,11 +158,11 @@ pthread_t start_progress(struct count *count) {
     return thread;
 }
 
-pthread_t *start_threads(struct args *args){
+struct thread_info *start_threads(struct args *args){
     int i;
-    pthread_t *threads;
+    struct thread_info *threads;
 
-    threads = malloc(sizeof(pthread_t) * (NUM_THREADS));
+    threads = malloc(sizeof(struct thread_info) * (NUM_THREADS));
 
     if (threads == NULL) {
         printf("Not enough memory\n");
@@ -168,7 +172,7 @@ pthread_t *start_threads(struct args *args){
     // Create NUM_THREAD threads running break_pass
     for (i = 0; i < NUM_THREADS; i++) {
 
-        if (0 != pthread_create(&threads[i], NULL, break_pass, args)) {
+        if (0 != pthread_create(&threads[i].thread, NULL, break_pass, args)) {
             printf("Could not create thread #%d of %d", i, NUM_THREADS);
             exit(1);
         }
@@ -179,6 +183,7 @@ pthread_t *start_threads(struct args *args){
 
 int main(int argc, char *argv[]) {
     struct args *args = malloc(sizeof(struct args));
+    struct thread_info *thrs;
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
     args->count->count = 0;
@@ -196,7 +201,7 @@ int main(int argc, char *argv[]) {
     //start progress bar
     pthread_t thr = start_progress(args->count);
     /* break_pass(args); */
-    start_threads(args);
+    thrs = start_threads(args);
 
     pthread_join(thr, NULL);
 
