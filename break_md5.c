@@ -8,6 +8,7 @@
 #include <math.h>
 
 #define PASS_LEN 6
+#define NUM_THREADS 6
 
 struct count {
     long count; // total iterations at the moment
@@ -18,6 +19,11 @@ struct args {
     char   *pass;
     unsigned char *md5;
     struct count *count;
+};
+
+struct thread_info {
+    pthread_t    id;    // id returned by pthread_create()
+    struct args *args;  // pointer to the arguments
 };
 
 long ipow(long base, int exp) {
@@ -135,6 +141,29 @@ pthread_t start_progress(struct count *count) {
     return thread;
 }
 
+pthread_t *start_threads(struct args args){
+    int i;
+    pthread_t *threads;
+
+    threads = malloc(sizeof(pthread_t) * (NUM_THREADS));
+
+    if (threads == NULL) {
+        printf("Not enough memory\n");
+        exit(1);
+    }
+
+    // Create NUM_THREAD threads running break_pass
+    for (i = 0; i < NUM_THREADS; i++) {
+
+        if (0 != pthread_create(&threads[i], NULL, break_pass, &args)) {
+            printf("Could not create thread #%d of %d", i, NUM_THREADS);
+            exit(1);
+        }
+    }
+
+    return threads;
+}
+
 int main(int argc, char *argv[]) {
     struct args *args = malloc(sizeof(struct args));
     args->count = malloc(sizeof(struct count));
@@ -159,6 +188,7 @@ int main(int argc, char *argv[]) {
 
     printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], args->pass);
+
     free(args->count);
     free(args->pass);
     free(args);
