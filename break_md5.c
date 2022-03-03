@@ -123,8 +123,10 @@ int main(int argc, char *argv[]) {
     hex_to_num(argv[1], md5_num);
 
     //start progress bar
-    start_progress(count);
+    pthread_t thr = start_progress(count);
     char *pass = break_pass(md5_num, count);
+
+    pthread_join(thr, NULL);
 
     printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], pass);
