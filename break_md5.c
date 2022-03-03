@@ -14,6 +14,12 @@ struct count {
     pthread_mutex_t mutex;
 };
 
+struct args {
+    char   *pass;
+    unsigned char *md5;
+    struct count *count;
+};
+
 long ipow(long base, int exp) {
     long res = 1;
     for (;;)
@@ -58,7 +64,8 @@ void hex_to_num(char *str, unsigned char *hex) {
         hex[i] = (hex_value(str[i*2]) << 4) + hex_value(str[i*2 + 1]);
 }
 
-char *break_pass(unsigned char *md5, struct count *count) {
+void *break_pass(void *ptr) {
+    struct args *args = ptr;
     unsigned char res[MD5_DIGEST_LENGTH];
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     long bound = ipow(26, PASS_LEN); // we have passwords of PASS_LEN
@@ -70,11 +77,12 @@ char *break_pass(unsigned char *md5, struct count *count) {
 
         MD5(pass, PASS_LEN, res);
 
-        if(0 == memcmp(res, md5, MD5_DIGEST_LENGTH)){
-            count->count = -1;
+        if(0 == memcmp(res, args->md5, MD5_DIGEST_LENGTH)){
+            args->count->count = -1;
+            args->pass = (char *) pass;
             break; // Found it!
         }
-        count->count = i;
+        args->count->count = i;
     }
 
     return (char *) pass;
@@ -127,9 +135,11 @@ pthread_t start_progress(struct count *count) {
 }
 
 int main(int argc, char *argv[]) {
-    struct count count;
-    pthread_mutex_init(&count.mutex,NULL);
-    count.count = 0;
+    struct args *args = malloc(sizeof(struct args));
+    args->count = malloc(sizeof(struct count));
+    pthread_mutex_init(&args->count->mutex,NULL);
+    args->count->count = 0;
+    args->pass=NULL;
 
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
@@ -138,13 +148,16 @@ int main(int argc, char *argv[]) {
 
     unsigned char md5_num[MD5_DIGEST_LENGTH];
     hex_to_num(argv[1], md5_num);
+    args->md5 = md5_num;
 
     //start progress bar
-    start_progress(&count);
-    char *pass = break_pass(md5_num, &count);
+    start_progress(args->count);
+    break_pass(args);
 
     printf("\n----------------------------------------------------------------\n");
-    printf("%s: %s\n", argv[1], pass);
-    free(pass);
+    printf("%s: %s\n", argv[1], args->pass);
+    free(args->count);
+    free(args->pass);
+    free(args);
     return 0;
 }
