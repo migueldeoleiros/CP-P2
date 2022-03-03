@@ -80,7 +80,8 @@ void op_speed(long *count){
     int j;
     j = *count;
     usleep(250000); //wait a quarter of a second
-    printf("\r\033[60C  %ld op/seg",(*count-j)*4);
+    if(j<*count)
+        printf("\r\033[60C  %ld op/seg",(*count-j)*4);
 }
 
 void *progress_bar(void *ptr){
