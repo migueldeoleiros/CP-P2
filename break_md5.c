@@ -78,9 +78,7 @@ void *break_pass(void *ptr) {
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     int localCount;
 
-    pthread_mutex_lock(&args->finish->mutex);
     while(args->finish->finish == 0){
-        pthread_mutex_unlock(&args->finish->mutex);
 
         pthread_mutex_lock(&args->count->mutex);
         localCount = args->count->count;
@@ -89,23 +87,14 @@ void *break_pass(void *ptr) {
 
         for(int i=0; i<NUM_ITER; i++){
             long_to_pass(localCount+i, pass);
-
             MD5(pass, PASS_LEN, res);
-
             if(0 == memcmp(res, args->md5, MD5_DIGEST_LENGTH)){
-                pthread_mutex_lock(&args->finish->mutex);
                 args->finish->finish = 1;
-                pthread_mutex_unlock(&args->finish->mutex);
-
                 args->pass = (char *) pass;
                 break; // Found it!
             }
         }
-
-        pthread_mutex_lock(&args->finish->mutex);
     }
-    pthread_mutex_unlock(&args->finish->mutex);
-
     return NULL;
 }
 
