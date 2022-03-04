@@ -8,7 +8,7 @@
 #include <math.h>
 
 #define PASS_LEN 6
-#define NUM_THREADS 8
+#define NUM_THREADS 2
 #define NUM_ITER 5
 
 struct count {
@@ -16,15 +16,16 @@ struct count {
     pthread_mutex_t mutex;
 };
 
+struct finish {
+    int finish; 
+    pthread_mutex_t mutex;
+};
+
 struct args {
     char   *pass;
     unsigned char *md5;
     struct count *count;
-};
-
-struct thread_info {
-    pthread_t thread;
-    struct args *args;
+    struct finish *finish;
 };
 
 long ipow(long base, int exp) {
@@ -75,40 +76,39 @@ void *break_pass(void *ptr) {
     struct args *args = ptr;
     unsigned char res[MD5_DIGEST_LENGTH];
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
-    long bound = ipow(26, PASS_LEN); // we have passwords of PASS_LEN
-                                     // lowercase chars =>
-                                     //     26 ^ PASS_LEN  different cases
+    int localCount;
 
-    pthread_mutex_lock(&args->count->mutex);
-    while(args->count->count < bound || args->count->count != -1){
-        pthread_mutex_unlock(&args->count->mutex);
+    pthread_mutex_lock(&args->finish->mutex);
+    while(args->finish->finish == 0){
+        pthread_mutex_unlock(&args->finish->mutex);
 
         pthread_mutex_lock(&args->count->mutex);
-        args->count->count += NUM_THREADS;
+        localCount = args->count->count;
+        args->count->count += NUM_ITER;
         pthread_mutex_unlock(&args->count->mutex);
 
+        for(int i=0; i<NUM_ITER; i++){
             pthread_mutex_lock(&args->count->mutex);
-            long_to_pass(args->count->count, pass);
+            long_to_pass(localCount+i, pass);
             pthread_mutex_unlock(&args->count->mutex);
 
             MD5(pass, PASS_LEN, res);
 
             if(0 == memcmp(res, args->md5, MD5_DIGEST_LENGTH)){
-                pthread_mutex_lock(&args->count->mutex);
-                args->count->count = -1;
-                pthread_mutex_unlock(&args->count->mutex);
+                pthread_mutex_lock(&args->finish->mutex);
+                args->finish->finish = 1;
+                pthread_mutex_unlock(&args->finish->mutex);
 
                 args->pass = (char *) pass;
-                return (char *) pass;
                 break; // Found it!
             }
-        
+        }
 
-        pthread_mutex_lock(&args->count->mutex);
+        pthread_mutex_lock(&args->finish->mutex);
     }
-    pthread_mutex_unlock(&args->count->mutex);
+    pthread_mutex_unlock(&args->finish->mutex);
 
-    return (char *) pass;
+    return NULL;
 }
 
 void op_speed(struct count *count) {
@@ -121,7 +121,7 @@ void op_speed(struct count *count) {
 
 void *progress_bar(void *ptr) {
     double bound = ipow(26, PASS_LEN);
-    struct count *count = ptr;
+    struct args *args = ptr;
     double percent = 0;
     int i;
 
@@ -133,24 +133,24 @@ void *progress_bar(void *ptr) {
     printf("]");
 
     //fill bar
-    while(count->count!=-1){
-        percent = (count->count / bound)*100;
+    while(args->finish->finish==0){
+        percent = (args->count->count / bound)*100;
         printf("\r%4.2f%%",percent);
         printf("\r\033[10C");
         for(i=2;i<=percent;i+=2)
             printf("\x1b[32m#\x1b[0m");
         printf("\r");
 
-        op_speed(count); //operations per second
+        op_speed(args->count); //operations per second
 
         fflush(stdout);
     }
     return NULL;
 }
 
-pthread_t start_progress(struct count *count) {
+pthread_t start_progress(struct args *args) {
     pthread_t thread;
-    if (0 != pthread_create(&thread, NULL, progress_bar, count)) {
+    if (0 != pthread_create(&thread, NULL, progress_bar, args)) {
         printf("Could not create thread");
         exit(1);
     }
@@ -158,11 +158,10 @@ pthread_t start_progress(struct count *count) {
     return thread;
 }
 
-struct thread_info *start_threads(struct args *args){
+pthread_t *start_threads(struct args *args){
     int i;
-    struct thread_info *threads;
 
-    threads = malloc(sizeof(struct thread_info) * (NUM_THREADS));
+    pthread_t *threads = malloc(sizeof(pthread_t) * (NUM_THREADS));
 
     if (threads == NULL) {
         printf("Not enough memory\n");
@@ -172,7 +171,7 @@ struct thread_info *start_threads(struct args *args){
     // Create NUM_THREAD threads running break_pass
     for (i = 0; i < NUM_THREADS; i++) {
 
-        if (0 != pthread_create(&threads[i].thread, NULL, break_pass, args)) {
+        if (0 != pthread_create(&threads[i], NULL, break_pass, args)) {
             printf("Could not create thread #%d of %d", i, NUM_THREADS);
             exit(1);
         }
@@ -183,11 +182,12 @@ struct thread_info *start_threads(struct args *args){
 
 int main(int argc, char *argv[]) {
     struct args *args = malloc(sizeof(struct args));
-    struct thread_info *thrs;
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
+    args->finish = malloc(sizeof(struct finish));
+    pthread_mutex_init(&args->finish->mutex,NULL);
     args->count->count = 0;
-    args->pass=NULL;
+    args->finish->finish = 0;
 
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
@@ -199,17 +199,23 @@ int main(int argc, char *argv[]) {
     args->md5 = md5_num;
 
     //start progress bar
-    pthread_t thr = start_progress(args->count);
+    pthread_t thr = start_progress(args);
     /* break_pass(args); */
-    thrs = start_threads(args);
+    pthread_t *thrs = start_threads(args);
 
     pthread_join(thr, NULL);
+
+    for(int i=0;i<NUM_THREADS;i++){
+        pthread_join(thrs[i], NULL);
+    }
 
     printf("\n----------------------------------------------------------------\n");
     printf("%s: %s\n", argv[1], args->pass);
 
     free(args->count);
+    free(args->finish);
     free(args->pass);
     free(args);
+    free(thrs);
     return 0;
 }
