@@ -16,16 +16,11 @@ struct count {
     pthread_mutex_t mutex;
 };
 
-struct finish {
-    int finish; 
-    pthread_mutex_t mutex;
-};
-
 struct args {
     char   *pass;
     unsigned char *md5;
     struct count *count;
-    struct finish *finish;
+    int finish; 
 };
 
 long ipow(long base, int exp) {
@@ -78,7 +73,7 @@ void *break_pass(void *ptr) {
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     int localCount;
 
-    while(args->finish->finish == 0){
+    while(args->finish == 0){
 
         pthread_mutex_lock(&args->count->mutex);
         localCount = args->count->count;
@@ -89,12 +84,13 @@ void *break_pass(void *ptr) {
             long_to_pass(localCount+i, pass);
             MD5(pass, PASS_LEN, res);
             if(0 == memcmp(res, args->md5, MD5_DIGEST_LENGTH)){
-                args->finish->finish = 1;
-                args->pass = (char *) pass;
+                args->finish = 1;
+                strcpy(args->pass,(char *) pass);
                 break; // Found it!
             }
         }
     }
+    free(pass);
     return NULL;
 }
 
@@ -120,7 +116,7 @@ void *progress_bar(void *ptr) {
     printf("]");
 
     //fill bar
-    while(args->finish->finish==0){
+    while(args->finish==0){
         percent = (args->count->count / bound)*100;
         printf("\r%4.2f%%",percent);
         printf("\r\033[10C");
@@ -146,9 +142,8 @@ pthread_t start_progress(struct args *args) {
 }
 
 pthread_t *start_threads(struct args *args){
-    int i;
-
     pthread_t *threads = malloc(sizeof(pthread_t) * (NUM_THREADS));
+    int i;
 
     if (threads == NULL) {
         printf("Not enough memory\n");
@@ -171,10 +166,9 @@ int main(int argc, char *argv[]) {
     struct args *args = malloc(sizeof(struct args));
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
-    args->finish = malloc(sizeof(struct finish));
-    pthread_mutex_init(&args->finish->mutex,NULL);
+    args->pass = malloc((PASS_LEN + 1) * sizeof(char));
     args->count->count = 0;
-    args->finish->finish = 0;
+    args->finish = 0;
 
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
@@ -187,10 +181,11 @@ int main(int argc, char *argv[]) {
 
     //start progress bar
     pthread_t thr = start_progress(args);
-    /* break_pass(args); */
+    //start threads with break_pass
     pthread_t *thrs = start_threads(args);
 
     pthread_join(thr, NULL);
+    pthread_mutex_destroy(&args->count->mutex);
 
     for(int i=0;i<NUM_THREADS;i++){
         pthread_join(thrs[i], NULL);
@@ -200,7 +195,6 @@ int main(int argc, char *argv[]) {
     printf("%s: %s\n", argv[1], args->pass);
 
     free(args->count);
-    free(args->finish);
     free(args->pass);
     free(args);
     free(thrs);
