@@ -8,7 +8,7 @@
 #include <math.h>
 
 #define PASS_LEN 6
-#define NUM_THREADS 2
+#define NUM_THREADS 8
 #define NUM_ITER 5
 
 struct count {
@@ -88,9 +88,7 @@ void *break_pass(void *ptr) {
         pthread_mutex_unlock(&args->count->mutex);
 
         for(int i=0; i<NUM_ITER; i++){
-            pthread_mutex_lock(&args->count->mutex);
             long_to_pass(localCount+i, pass);
-            pthread_mutex_unlock(&args->count->mutex);
 
             MD5(pass, PASS_LEN, res);
 
