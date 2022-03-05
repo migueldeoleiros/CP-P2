@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <sys/types.h>
 #include <openssl/md5.h>
 #include <stdio.h>
@@ -16,10 +17,15 @@ struct count {
     pthread_mutex_t mutex;
 };
 
+struct n_hashes {
+    long n_hashes; // total iterations at the moment
+    pthread_mutex_t mutex;
+};
+
 struct args {
-    char *md5;
     struct count *count;
-    int finish; 
+    struct n_hashes *n_hashes;
+    char **md5;
 };
 
 long ipow(long base, int exp) {
@@ -73,11 +79,11 @@ void *break_pass(void *ptr) {
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
     double bound = ipow(26, PASS_LEN);
     int localCount;
+    char* aux;
 
-    hex_to_num(args->md5, md5_num);
 
     pthread_mutex_lock(&args->count->mutex);
-    while(args->finish == 0 && args->count->count+NUM_ITER < bound){
+    while(args->n_hashes->n_hashes != 0 && args->count->count+NUM_ITER < bound){
         pthread_mutex_unlock(&args->count->mutex);
 
         pthread_mutex_lock(&args->count->mutex);
@@ -88,12 +94,22 @@ void *break_pass(void *ptr) {
         for(int i=0; i<NUM_ITER; i++){
             long_to_pass(localCount+i, pass);
             MD5(pass, PASS_LEN, res);
-            if(0 == memcmp(res, md5_num, MD5_DIGEST_LENGTH)){
-                printf("%s: %-50s\n", args->md5, (char *) pass); //print result
-                usleep(250000); //wait a quarter of a second
+            for(int i=0;i<args->n_hashes->n_hashes;i++){
+                hex_to_num(args->md5[i], md5_num);
+                if(0 == memcmp(res, md5_num, MD5_DIGEST_LENGTH)){
+                    printf("%s: %-50s\n", args->md5[i], (char *) pass); //print result
+                    usleep(250000); //wait a quarter of a second
 
-                args->finish = 1;
-                break; // Found it!
+                    // delete hash from list 
+                    for (int j = i; j < (args->n_hashes->n_hashes - 1); j++) {
+                        aux = args->md5[j];
+                        args->md5[j] = args->md5[j + 1];
+                        args->md5[j + 1] = aux;
+                    }
+                    args->n_hashes->n_hashes--;
+
+                    break; // Found it!
+                }
             }
         }
         pthread_mutex_lock(&args->count->mutex);
@@ -109,7 +125,7 @@ void op_speed(struct count *count) {
     j = count->count;
     usleep(250000); //wait a quarter of a second
     if(j<count->count)
-        printf("\r\033[61C  %ld op/seg",(count->count-j)*4);
+        printf("\r\033[61C  %ld op/seg  ",(count->count-j)*4);
 }
 
 void *progress_bar(void *ptr) {
@@ -118,7 +134,7 @@ void *progress_bar(void *ptr) {
     double percent = 0;
     int i;
 
-    while(args->finish==0){
+    while(args->n_hashes->n_hashes!=0){
         percent = (args->count->count / bound)*100;
 
         printf("\r%4.2f%%\t [",percent); //print percent
@@ -170,18 +186,31 @@ pthread_t *start_threads(struct args *args){
     return threads;
 }
 
-int main(int argc, char *argv[]) {
-    struct args *args = malloc(sizeof(struct args));
+void set_values(int argc, char *argv[], struct args *args){
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
     args->count->count = 0;
-    args->finish = 0;
-    args->md5 = argv[1];
+
+    args->n_hashes = malloc(sizeof(struct n_hashes));
+    pthread_mutex_init(&args->n_hashes->mutex,NULL);
+    args->n_hashes->n_hashes = --argc;
+
+    args->md5 = malloc((sizeof(char*)*MD5_DIGEST_LENGTH) * argc);
+
+    for(int i=0;i<argc;i++)
+        args->md5[i] = argv[i+1];
+
+}
+
+int main(int argc, char *argv[]) {
+    struct args *args = malloc(sizeof(struct args));
 
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
         exit(0);
     }
+
+    set_values(argc, argv, args);
 
     //start progress bar
     pthread_t thr = start_progress(args);
@@ -196,6 +225,8 @@ int main(int argc, char *argv[]) {
     pthread_mutex_destroy(&args->count->mutex);
 
     free(args->count);
+    free(args->n_hashes);
+    free(args->md5);
     free(args);
     free(thrs);
     return 0;
