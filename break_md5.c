@@ -17,8 +17,7 @@ struct count {
 };
 
 struct args {
-    char   *pass;
-    unsigned char *md5;
+    char *md5;
     struct count *count;
     int finish; 
 };
@@ -70,10 +69,16 @@ void hex_to_num(char *str, unsigned char *hex) {
 void *break_pass(void *ptr) {
     struct args *args = ptr;
     unsigned char res[MD5_DIGEST_LENGTH];
+    unsigned char md5_num[MD5_DIGEST_LENGTH];
     unsigned char *pass = malloc((PASS_LEN + 1) * sizeof(char));
+    double bound = ipow(26, PASS_LEN);
     int localCount;
 
-    while(args->finish == 0){
+    hex_to_num(args->md5, md5_num);
+
+    pthread_mutex_lock(&args->count->mutex);
+    while(args->finish == 0 && args->count->count+NUM_ITER < bound){
+        pthread_mutex_unlock(&args->count->mutex);
 
         pthread_mutex_lock(&args->count->mutex);
         localCount = args->count->count;
@@ -83,13 +88,18 @@ void *break_pass(void *ptr) {
         for(int i=0; i<NUM_ITER; i++){
             long_to_pass(localCount+i, pass);
             MD5(pass, PASS_LEN, res);
-            if(0 == memcmp(res, args->md5, MD5_DIGEST_LENGTH)){
+            if(0 == memcmp(res, md5_num, MD5_DIGEST_LENGTH)){
+                printf("%s: %-50s\n", args->md5, (char *) pass); //print result
+                usleep(250000); //wait a quarter of a second
+
                 args->finish = 1;
-                strcpy(args->pass,(char *) pass);
                 break; // Found it!
             }
         }
+        pthread_mutex_lock(&args->count->mutex);
     }
+    pthread_mutex_unlock(&args->count->mutex);
+
     free(pass);
     return NULL;
 }
@@ -99,7 +109,7 @@ void op_speed(struct count *count) {
     j = count->count;
     usleep(250000); //wait a quarter of a second
     if(j<count->count)
-        printf("\r\033[60C  %ld op/seg",(count->count-j)*4);
+        printf("\r\033[61C  %ld op/seg",(count->count-j)*4);
 }
 
 void *progress_bar(void *ptr) {
@@ -108,26 +118,24 @@ void *progress_bar(void *ptr) {
     double percent = 0;
     int i;
 
-    //print empty bar
-    printf("\r%4.2f%%",percent);
-    printf("\t [");
-    for(i=0;i<98;i+=2)
-        printf(".");
-    printf("]");
-
-    //fill bar
     while(args->finish==0){
         percent = (args->count->count / bound)*100;
-        printf("\r%4.2f%%",percent);
-        printf("\r\033[10C");
+
+        printf("\r%4.2f%%\t [",percent); //print percent
+        printf("\033[49C ]"); //close bracket
+        printf("\r\033[10C"); //move cursor
         for(i=2;i<=percent;i+=2)
-            printf("\x1b[32m#\x1b[0m");
+            printf("\x1b[32m#\x1b[0m"); //fill bar
         printf("\r");
 
         op_speed(args->count); //operations per second
 
         fflush(stdout);
     }
+
+    //print end message
+    printf("\r\033[78C \x1b[32mFOUND\x1b[0m\n");
+
     return NULL;
 }
 
@@ -166,36 +174,28 @@ int main(int argc, char *argv[]) {
     struct args *args = malloc(sizeof(struct args));
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
-    args->pass = malloc((PASS_LEN + 1) * sizeof(char));
     args->count->count = 0;
     args->finish = 0;
+    args->md5 = argv[1];
 
     if(argc < 2) {
         printf("Use: %s string\n", argv[0]);
         exit(0);
     }
 
-    unsigned char md5_num[MD5_DIGEST_LENGTH];
-    hex_to_num(argv[1], md5_num);
-    args->md5 = md5_num;
-
     //start progress bar
     pthread_t thr = start_progress(args);
     //start threads with break_pass
     pthread_t *thrs = start_threads(args);
 
-    pthread_join(thr, NULL);
-    pthread_mutex_destroy(&args->count->mutex);
-
     for(int i=0;i<NUM_THREADS;i++){
         pthread_join(thrs[i], NULL);
     }
 
-    printf("\n----------------------------------------------------------------\n");
-    printf("%s: %s\n", argv[1], args->pass);
+    pthread_join(thr, NULL);
+    pthread_mutex_destroy(&args->count->mutex);
 
     free(args->count);
-    free(args->pass);
     free(args);
     free(thrs);
     return 0;
