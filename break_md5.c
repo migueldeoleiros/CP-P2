@@ -185,6 +185,7 @@ pthread_t *start_threads(struct args *args){
 }
 
 void set_values(int argc, char *argv[], struct args *args){
+    
     args->count = malloc(sizeof(struct count));
     pthread_mutex_init(&args->count->mutex,NULL);
     args->count->count = 0;
@@ -198,6 +199,23 @@ void set_values(int argc, char *argv[], struct args *args){
     for(int i=0;i<argc;i++)
         args->md5[i] = argv[i+1];
 
+}
+
+void free_values(struct args *args, pthread_t *thrs,pthread_t thr){
+
+    for(int i=0;i<NUM_THREADS;i++){
+        pthread_join(thrs[i], NULL);
+    }
+    pthread_join(thr, NULL);
+
+    pthread_mutex_destroy(&args->count->mutex);
+    pthread_mutex_destroy(&args->n_hashes->mutex);
+
+    free(args->count);
+    free(args->n_hashes);
+    free(args->md5);
+    free(args);
+    free(thrs);
 }
 
 int main(int argc, char *argv[]) {
@@ -215,17 +233,7 @@ int main(int argc, char *argv[]) {
     //start threads with break_pass
     pthread_t *thrs = start_threads(args);
 
-    for(int i=0;i<NUM_THREADS;i++){
-        pthread_join(thrs[i], NULL);
-    }
+    free_values(args,thrs,thr);
 
-    pthread_join(thr, NULL);
-    pthread_mutex_destroy(&args->count->mutex);
-
-    free(args->count);
-    free(args->n_hashes);
-    free(args->md5);
-    free(args);
-    free(thrs);
     return 0;
 }
