@@ -81,10 +81,7 @@ void *break_pass(void *ptr) {
     int localCount;
     char* aux;
 
-
-    pthread_mutex_lock(&args->count->mutex);
-    while(args->n_hashes->n_hashes != 0 && args->count->count+NUM_ITER < bound){
-        pthread_mutex_unlock(&args->count->mutex);
+    while(args->n_hashes->n_hashes != 0 && args->count->count < bound){
 
         pthread_mutex_lock(&args->count->mutex);
         localCount = args->count->count;
@@ -106,15 +103,16 @@ void *break_pass(void *ptr) {
                         args->md5[j] = args->md5[j + 1];
                         args->md5[j + 1] = aux;
                     }
+
+                    pthread_mutex_lock(&args->n_hashes->mutex);
                     args->n_hashes->n_hashes--;
+                    pthread_mutex_unlock(&args->n_hashes->mutex);
 
                     break; // Found it!
                 }
             }
         }
-        pthread_mutex_lock(&args->count->mutex);
     }
-    pthread_mutex_unlock(&args->count->mutex);
 
     free(pass);
     return NULL;
