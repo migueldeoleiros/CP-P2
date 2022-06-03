@@ -1,0 +1,62 @@
+* P2 MD5
+En sistemas que necesitan autenticare usando passwords es frecuente que en vez de almacenarlos directamente se guarde un hash. Cuando hay que comprobar si un password es correcto, se aplica la misma función de hash y se compara con el hash almacenado. En caso de un problema de seguridad que permita acceder a los hash los passwords no quedan expuestos porque la función no es fácilmente invertible.
+
+Si asumimos ciertas restricciones en la generación de passwords podemos romperlos pro fuerza bruta. Vamos a partir de un programa que, a partir de un  un hash md5, recupere el password suponiendo:
+- Los passwords tienen 6 caracteres.
+- Cada carácter solo puede ser una letra minúscula distinta de la ñ
+
+Como excluyendo la ñ hay 26 letras, esto permite 26^6 passwords distintos. En el programa hay dos funciones (/pass_to_long/ y /long_to_pass/) que establecen una correspondencia entre un número entre 0 y 26^6 y un password. Para romper el hash el programa itera entre 0 y 26^6, genera el password correspondiente, calcula su hash md5, y lo compara con el hash que queremos romper.
+
+Para comprobar si tenemos un password podemos generar su hash de la siguiente forma:
+#+begin_src shell
+  $ echo -n "passwd" | md5sum
+
+  76a2173be6393254e72ffa4d6df1030a -
+#+end_src
+Y romperíamos ese hash llamando al programa y pasándolo:
+#+begin_src shell
+  $ ./break_md5 76a2173be6393254e72ffa4d6df1030a
+
+  76a2173be6393254e72ffa4d6df1030a: passwd
+#+end_src
+Para compilar el programa, hay que tener instaladas las cabeceras de desarrollo de *openssl*
+
+** Ejercicio 1
+*Barra de progreso*
+
+El programa trabaja sin mostrar información sobre los casos que lleva probados. Crea un thread que se encargue de imprimir una barra de progreso.
+El thread que está haciendo cálculos debería informar de cuantos casos lleva probados, y el thread que imprime la barra debería usar esta información para calcular que proporción de los casos totales llevamos.
+No debería haber esperas activas.
+
+Para esto creamos una función /progress_bar/ que se ejecuta desde un thread separado. Calculamos el porcentaje de passwords comparadas con un contador sabiendo que el máximo es 26^6, y con eso imprimimos la barra de progreso que se incrementará cada 2 puntos porcentuales.
+
+** Ejercicio 2
+*Estimación del número de passwords comprobados por segundo*
+
+Añade al final de la barra de progreso un mensaje con el número de passwords que se están comprobando en cada segundo.
+Este total debe irse actualizando en tiempo real con la barra, es decir, si otros procesos usan la cpu y reducen la capacidad de cálculo disponible para comprobar hashes, el dato debería actualizarse para reflejarlo.
+
+Como ya teníamos un contador del número de passwords comprobadas, podemos calcular la velocidad sabiendo la diferencia de dicha variable en un intervalo de tiempo. Ejecutamos esta función junto con la barra de progreso.
+
+** Ejercicio 3
+*Programa multithread*
+
+Hasta hora usamos un único thread para romper el hash. Como el programa prueba de forma exhaustiva, podríamos dividir los posibles passwords entre varios threads y acelerar el cálculo. Al obtener el resultado en cualquiera de ellos deberíamos parar el resto.
+
+Los threads no deberían usar un reparto estático de los passwords a probar, si no que deberían tener un contador compartido con el número del primer password que no se ha probado. Los threads usarán esa variable para decidir cual es el número de password que deben comprobar.
+Para reducir la contención por el contador se puede hacer que los threads avancen el contador por una cierta cantidad mayor que 1, y que prueben esos passwords en secuencia.
+
+Creamos una variable /finish/ que parará todos los threads cuando se encuentre la respuesta. Hacemos que cada thread ejecute varias iteraciones cada vez que accede a la variable compartida count, sumaremos a count las iteraciones que va a hacer antes de ejecutarlas, así los otros threads sabrán que esas están en proceso y pueden comprobar las siguientes.
+
+** Ejercicio 4
+*Probar varias claves a la vez*
+
+Al romper el password por fuerza bruta estamos generando posibles password, calculando su hash md5, y comparándolo con el que queremos romper. El paso que más carga implica es el cálculo del hash, por lo que si queremos romper varios passwords es más eficiente calcular el hash asociado a uno de los posibles passwords, y compararlo con todos los hashes que queremos romper.
+
+Introduciremos más passwords así:
+#+begin_src shell
+$ ./break_md5 76a2173be6393254e72ffa4d6df1030a 35bc8cec895861697a0243c1304c7789
+#+end_src
+En el momento que se rompa un hash se imprime, y en todos los threads se deja de comparar contra él.
+
+Dado que ahora queremos imprimir los resultados a medida que se ejecuta el programa, tuvimos que reescribir el código de la barra de progreso y la salida. Ahora el password será impreso desde la función /break_pass/ y no al terminar en /main/. Guardaremos los hashes a buscar en un array compartido por todos los threads y tendremos una variable compartida protegida que guarda el número de hashes restantes. El resto es simplemente añadir un for loop que comprueba cada iteración con todos los elementos de la lista de hashes.
