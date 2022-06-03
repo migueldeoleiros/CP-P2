@@ -21,7 +21,7 @@ Y romperíamos ese hash llamando al programa y pasándolo:
 #+end_src
 Para compilar el programa, hay que tener instaladas las cabeceras de desarrollo de *openssl*
 
-** Ejercicio 1
+** [[https://github.com/migueldeoleiros/CP-P2/tree/ejercicio1][Ejercicio 1]]
 *Barra de progreso*
 
 El programa trabaja sin mostrar información sobre los casos que lleva probados. Crea un thread que se encargue de imprimir una barra de progreso.
@@ -30,7 +30,7 @@ No debería haber esperas activas.
 
 Para esto creamos una función /progress_bar/ que se ejecuta desde un thread separado. Calculamos el porcentaje de passwords comparadas con un contador sabiendo que el máximo es 26^6, y con eso imprimimos la barra de progreso que se incrementará cada 2 puntos porcentuales.
 
-** Ejercicio 2
+** [[https://github.com/migueldeoleiros/CP-P2/tree/ejercicio2][Ejercicio 2]]
 *Estimación del número de passwords comprobados por segundo*
 
 Añade al final de la barra de progreso un mensaje con el número de passwords que se están comprobando en cada segundo.
@@ -38,7 +38,7 @@ Este total debe irse actualizando en tiempo real con la barra, es decir, si otro
 
 Como ya teníamos un contador del número de passwords comprobadas, podemos calcular la velocidad sabiendo la diferencia de dicha variable en un intervalo de tiempo. Ejecutamos esta función junto con la barra de progreso.
 
-** Ejercicio 3
+** [[https://github.com/migueldeoleiros/CP-P2/tree/ejercicio3][Ejercicio 3]]
 *Programa multithread*
 
 Hasta hora usamos un único thread para romper el hash. Como el programa prueba de forma exhaustiva, podríamos dividir los posibles passwords entre varios threads y acelerar el cálculo. Al obtener el resultado en cualquiera de ellos deberíamos parar el resto.
@@ -48,7 +48,7 @@ Para reducir la contención por el contador se puede hacer que los threads avanc
 
 Creamos una variable /finish/ que parará todos los threads cuando se encuentre la respuesta. Hacemos que cada thread ejecute varias iteraciones cada vez que accede a la variable compartida count, sumaremos a count las iteraciones que va a hacer antes de ejecutarlas, así los otros threads sabrán que esas están en proceso y pueden comprobar las siguientes.
 
-** Ejercicio 4
+** [[https://github.com/migueldeoleiros/CP-P2/tree/ejercicio4][Ejercicio 4]]
 *Probar varias claves a la vez*
 
 Al romper el password por fuerza bruta estamos generando posibles password, calculando su hash md5, y comparándolo con el que queremos romper. El paso que más carga implica es el cálculo del hash, por lo que si queremos romper varios passwords es más eficiente calcular el hash asociado a uno de los posibles passwords, y compararlo con todos los hashes que queremos romper.
